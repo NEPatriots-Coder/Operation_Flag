@@ -7,7 +7,7 @@ This is a single-file Gradio app that generates a structured, **hypothetical** G
 - requested GPU count
 - business/technical priorities
 
-It uses OpenAI Chat Completions (`OPENAI_MODEL`, default: `gpt-4o-mini`) and returns:
+It supports OpenAI or Anthropic (Claude) based on env config and returns:
 - on-screen markdown output
 - optional downloadable `.md` report
 
@@ -37,27 +37,30 @@ source .venv312/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Set API key
+### 3. Configure provider + API key
 
-Option A (recommended): put key in `secrets/.env`
+Option A: Anthropic / Claude (current fallback path)
 
 ```bash
 mkdir -p secrets
-echo 'OPENAI_API_KEY="sk-..."' > secrets/.env
+cat > secrets/.env << 'EOF'
+LLM_PROVIDER="anthropic"
+ANTHROPIC_API_KEY="sk-ant-..."
+ANTHROPIC_MODEL="claude-3-5-sonnet-latest"
+EOF
 ```
 
-Option B: export in shell
+Option B: OpenAI
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+cat > secrets/.env << 'EOF'
+LLM_PROVIDER="openai"
+OPENAI_API_KEY="sk-..."
+OPENAI_MODEL="gpt-4.1"
+EOF
 ```
 
-Optional model override:
-
-```bash
-export OPENAI_MODEL="gpt-4o-mini"
-```
-
+`LLM_PROVIDER` can be `anthropic`, `openai`, or `auto` (auto picks whichever key exists).
 You can also provide a fallback key in the app UI.
 
 ### 4. Run the app
@@ -77,6 +80,6 @@ PORT=7861 python demo_wizard.py
 
 ## Project files
 
-- `demo_wizard.py` - app, prompt logic, OpenAI call, and markdown export
+- `demo_wizard.py` - app, prompt logic, provider call, and markdown export
 - `requirements.txt` - Python dependencies
 - `.gitignore` - Python/venv/editor ignores

@@ -1,6 +1,6 @@
 """
 CoreWeave Demo Wizard - Hackathon MVP
-Single-file Gradio + OpenAI prototype for More. Faster. Better. 2026.
+Single-file Gradio app with OpenAI/Anthropic support for More. Faster. Better. 2026.
 """
 
 # =============================
@@ -21,6 +21,11 @@ try:
 except ImportError:
     OpenAI = None
 
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+
 
 # =============================
 # Prompt Configuration
@@ -36,14 +41,20 @@ SYSTEM_PROMPT: str = textwrap.dedent(
     Safety and factual constraints (MANDATORY):
     1) Be factual and cautious. Do not fabricate certifications, benchmarks, customer logos,
        contract status, compliance approvals, or production claims.
-    2) Only use these public-stat guardrails when contextually relevant and phrase carefully:
-       - "96-98% goodput" for scaled training efficiency style framing.
-       - "40%+ inference throughput improvement on H200 vs H100" as directional public benchmark framing.
-       - "up to 2.86x per-chip (GB200-class vs H100-class)" as directional public benchmark framing.
+    2) Only use these benchmark guardrails when contextually relevant and phrase carefully:
+       - Goodput: "96-98% goodput (directional from CoreWeave public reports on scaled H100/H200 clusters)".
+       - H200 inference: "up to ~40% higher throughput vs H100 on models like Llama 2 70B inference (directional MLPerf)".
+       - GB200: "up to 2.86x per-chip speedup vs H200 on large models like Llama 3.1 405B (directional MLPerf)".
+       Use benchmark language at most once per output.
     3) For high-stakes/government-like scenarios, explicitly label as hypothetical and focus on:
        secure enclaves, reliability, and FedRAMP pursuit alignment language.
        Never claim FedRAMP authorization or accreditation.
     4) If user input is vague, make reasonable assumptions and list them in "Notes & Assumptions".
+    5) Ensure YAML/Slurm snippets use valid syntax and correct spelling/casing:
+       H200 (not H2O00), InfiniBand (capitalized), data_parallel, distributed_parallel.
+    6) Prefer realistic snippet structure based on public CoreWeave-style examples:
+       K8s-style keys such as resources and nodeSelector, or Slurm sbatch directives.
+    7) Keep each section concise; avoid repeating the same benefit across sections.
 
     Output contract (strict headings in order):
     ## Recommended Cluster Configuration
@@ -85,8 +96,8 @@ FEW_SHOT_EXAMPLES: str = textwrap.dedent(
     cluster:
       gpu_type: H200
       gpu_count: 128
-      network: infiniBand
-      storage: distributed-parallel
+      network: InfiniBand
+      storage: distributed_parallel
     training:
       strategy: data_parallel
       checkpoint_interval_min: 30
@@ -159,6 +170,51 @@ FEW_SHOT_EXAMPLES: str = textwrap.dedent(
 
     ## Notes & Assumptions
     - This is a hypothetical scenario; no government authorization is implied.
+
+    [Example 4 - Better YAML Style]
+    Input:
+    - workload_type: LLM Fine-Tuning
+    - gpu_count: 64
+    - priorities: cost awareness, reliable checkpoints
+
+    Output:
+    ## Recommended Cluster Configuration
+    Recommend a Kubernetes batch job pattern on H200-class nodes with explicit node targeting and persistent storage for checkpoints.
+
+    ## Performance & Business Impact
+    - For training at this scale, cite 96-98% goodput as directional context only.
+    - Structured checkpointing lowers recovery risk and wasted compute during retries.
+
+    ## Sample Deployment Snippet
+    ```yaml
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: llm-finetune-job
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            accelerator: h200
+          containers:
+            - name: trainer
+              image: coreweave/pytorch:latest
+              resources:
+                limits:
+                  nvidia.com/gpu: 8
+              env:
+                - name: CHECKPOINT_DIR
+                  value: /mnt/checkpoints
+          restartPolicy: Never
+    ```
+
+    ## Production Next Steps
+    1. Validate checkpoint write/read throughput under failure-restart tests.
+    2. Tune batch size and gradient accumulation for utilization and cost targets.
+    3. Confirm cluster sizing with solution architecture.
+
+    ## Notes & Assumptions
+    - Snippet is illustrative and should be adapted to your cluster policies.
     """
 ).strip()
 
@@ -178,15 +234,33 @@ WORKLOAD_OPTIONS: list[str] = [
 # Core Helpers
 # =============================
 def load_api_key(env_key: str, fallback_key: str) -> str:
-    """Resolve OpenAI API key from env first, then fallback input."""
+    """Resolve API key from env first, then fallback input."""
     env_val = (env_key or "").strip()
     fallback_val = (fallback_key or "").strip()
     resolved = env_val or fallback_val
     if not resolved:
         raise ValueError(
-            "Missing API key. Set OPENAI_API_KEY or provide key in UI fallback field."
+            "Missing API key. Set provider key in env file or provide key in UI fallback field."
         )
     return resolved
+
+
+def resolve_provider() -> str:
+    """
+    Resolve provider from env.
+    Supported values: anthropic, openai, auto (default).
+    """
+    raw_provider = (os.environ.get("LLM_PROVIDER", "auto") or "auto").strip().lower()
+    if raw_provider in {"anthropic", "openai"}:
+        return raw_provider
+
+    has_anthropic_key = bool((os.environ.get("ANTHROPIC_API_KEY", "") or "").strip())
+    has_openai_key = bool((os.environ.get("OPENAI_API_KEY", "") or "").strip())
+    if has_anthropic_key:
+        return "anthropic"
+    if has_openai_key:
+        return "openai"
+    return "openai"
 
 
 def build_user_prompt(workload_type: str, gpu_count: int, priorities: str) -> str:
@@ -221,8 +295,24 @@ def build_user_prompt(workload_type: str, gpu_count: int, priorities: str) -> st
 
 
 def extract_text_from_response(resp) -> str:
-    """Extract text from OpenAI response object with safe fallbacks."""
+    """Extract text from provider response object with safe fallbacks."""
     try:
+        # Anthropic messages API path.
+        content = getattr(resp, "content", None)
+        if content and isinstance(content, list):
+            chunks = []
+            for block in content:
+                block_type = getattr(block, "type", None)
+                if block_type == "text":
+                    chunks.append(getattr(block, "text", ""))
+                else:
+                    maybe_text = getattr(block, "text", None)
+                    if maybe_text:
+                        chunks.append(maybe_text)
+            merged = "\n".join(c for c in chunks if c).strip()
+            if merged:
+                return merged
+
         # Chat Completions API primary path.
         choices = getattr(resp, "choices", None)
         if choices and isinstance(choices, list):
@@ -253,14 +343,7 @@ def generate_demo(
 ) -> Tuple[str, Optional[str]]:
     """Generate markdown demo output and optional markdown export file."""
     try:
-        if OpenAI is None:
-            raise RuntimeError(
-                "The openai package is not installed. Install with: pip install openai"
-            )
-
-        key = load_api_key(os.environ.get("OPENAI_API_KEY", ""), api_key_fallback)
-        client = OpenAI(api_key=key)
-        model = (os.environ.get("OPENAI_MODEL", "") or "gpt-4o-mini").strip()
+        provider = resolve_provider()
 
         user_prompt = build_user_prompt(
             workload_type=workload_type,
@@ -268,15 +351,43 @@ def generate_demo(
             priorities=priorities,
         )
 
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=1800,
-            temperature=0.2,
-            messages=[
-                {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}"},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        if provider == "anthropic":
+            if anthropic is None:
+                raise RuntimeError(
+                    "The anthropic package is not installed. Install with: pip install anthropic"
+                )
+            key = load_api_key(
+                os.environ.get("ANTHROPIC_API_KEY", ""),
+                api_key_fallback,
+            )
+            client = anthropic.Anthropic(api_key=key)
+            model = (
+                os.environ.get("ANTHROPIC_MODEL", "") or "claude-3-5-sonnet-latest"
+            ).strip()
+            response = client.messages.create(
+                model=model,
+                max_tokens=1800,
+                temperature=0.2,
+                system=f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}",
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+        else:
+            if OpenAI is None:
+                raise RuntimeError(
+                    "The openai package is not installed. Install with: pip install openai"
+                )
+            key = load_api_key(os.environ.get("OPENAI_API_KEY", ""), api_key_fallback)
+            client = OpenAI(api_key=key)
+            model = (os.environ.get("OPENAI_MODEL", "") or "gpt-4o-mini").strip()
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=1800,
+                temperature=0.2,
+                messages=[
+                    {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}"},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
 
         markdown_text = extract_text_from_response(response).strip()
         if not markdown_text:
@@ -307,7 +418,7 @@ def generate_demo(
             "## Setup Required\n\n"
             f"{ve}\n\n"
             "**Quick fix:**\n"
-            "- Export `OPENAI_API_KEY` in your shell, or\n"
+            "- Set `LLM_PROVIDER` + provider API key in `secrets/.env`, or\n"
             "- Paste key in the fallback key field and retry.",
             None,
         )
@@ -317,7 +428,7 @@ def generate_demo(
             "Sorry, the request could not be completed.\n\n"
             "**Check the following:**\n"
             "1. API key is valid and has model access.\n"
-            "2. `openai` package is installed (`pip install openai`).\n"
+            "2. Provider package is installed (`pip install openai anthropic`).\n"
             "3. Network/API service is reachable.\n\n"
             f"**Debug detail:** `{str(ex)}`",
             None,
@@ -357,9 +468,9 @@ def build_interface() -> gr.Blocks:
         )
 
         api_key_fallback_input = gr.Textbox(
-            label="OpenAI API Key (optional fallback)",
+            label="LLM API Key (optional fallback)",
             type="password",
-            placeholder="sk-...",
+            placeholder="sk-... or sk-ant-...",
         )
 
         generate_btn = gr.Button("Generate Demo")
