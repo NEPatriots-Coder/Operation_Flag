@@ -42,7 +42,8 @@ SYSTEM_PROMPT: str = textwrap.dedent(
     1) Be factual and cautious. Do not fabricate certifications, benchmarks, customer logos,
        contract status, compliance approvals, or production claims.
     2) Only use these benchmark guardrails when contextually relevant and phrase carefully:
-       - Goodput: "96-98% goodput (directional from CoreWeave public reports on scaled H100/H200 clusters)".
+       - Goodput: "CoreWeave infrastructure has demonstrated 96-98% goodput on scaled H100/H200 clusters (directional from public reports and MLPerf benchmarks)".
+       - H200 training: emphasize higher memory capacity and bandwidth (141GB HBM3e per GPU) for larger models/batches.
        - H200 inference: "up to ~40% higher throughput vs H100 on models like Llama 2 70B inference (directional MLPerf)".
        - GB200: "up to 2.86x per-chip speedup vs H200 on large models like Llama 3.1 405B (directional MLPerf)".
        Use benchmark language at most once per output.
@@ -55,6 +56,8 @@ SYSTEM_PROMPT: str = textwrap.dedent(
     6) Prefer realistic snippet structure based on public CoreWeave-style examples:
        K8s-style keys such as resources and nodeSelector, or Slurm sbatch directives.
     7) Keep each section concise; avoid repeating the same benefit across sections.
+    8) In Production Next Steps, include a concrete CTA when relevant:
+       "Explore ARENA lab access for production-scale validation (submit interest at coreweave.com/arena)".
 
     Output contract (strict headings in order):
     ## Recommended Cluster Configuration
@@ -88,7 +91,7 @@ FEW_SHOT_EXAMPLES: str = textwrap.dedent(
     For 128 GPUs, emphasize balanced node topology and fault-aware checkpoint strategy.
 
     ## Performance & Business Impact
-    - At this scale, operators often target high training efficiency; cite 96-98% goodput as directional context.
+    - CoreWeave infrastructure has demonstrated 96-98% goodput on scaled H100/H200 clusters (directional benchmark framing).
     - Faster iteration cycles can reduce model tuning timeline risk.
 
     ## Sample Deployment Snippet
@@ -111,6 +114,7 @@ FEW_SHOT_EXAMPLES: str = textwrap.dedent(
     ## Notes & Assumptions
     - Assumes distributed training framework readiness.
     - Figures are directional and require workload-specific validation.
+    - Directional figures are based on public CoreWeave benchmark framing (including MLPerf-style reporting).
 
     [Example 2 - Inference]
     Input:
@@ -280,6 +284,8 @@ def build_user_prompt(workload_type: str, gpu_count: int, priorities: str) -> st
         2) Recommend practical cluster shape using H100/H200/GB200-class language as appropriate.
         3) Include networking/storage assumptions; mention InfiniBand only if relevant.
         4) Include cautious benchmark framing only where relevant.
+           - For training, prefer H200 memory capacity/bandwidth framing (141GB HBM3e).
+           - Reserve "~40% higher throughput vs H100" framing for inference-oriented contexts.
         5) Include at least one fenced code block (YAML or Slurm).
         6) Include concrete production next steps and a CTA (sales contact or ARENA interest form).
         7) Explicitly list assumptions.
