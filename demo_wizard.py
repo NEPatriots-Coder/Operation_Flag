@@ -71,6 +71,18 @@ SYSTEM_PROMPT: str = textwrap.dedent(
        - Avoid inventing compliance keys in YAML; prefer descriptive notes such as
          "secure_enclaves: enabled (hypothetical)".
        - Keep YAML realistic and minimal; prefer simple config over complex K8s unless explicitly requested.
+    10) For workloads involving very large datasets (e.g., 100TB or petabyte-scale):
+       - Emphasize CoreWeave high-performance storage solutions, such as AI Object Storage with
+         distributed-parallel access patterns.
+       - Directionally mention throughput framing such as "up to several GB/s per GPU for data loading"
+         or "aggregate reads scaling to hundreds of GiB/s at large cluster sizes" only when relevant.
+         Do not fabricate exact numbers.
+       - Recommend distributed-parallel storage, InfiniBand networking for multi-node efficiency,
+         and async/reliable checkpointing to reduce I/O bottlenecks.
+       - In Notes & Assumptions, state that actual performance requires validation with the specific
+         data pipeline and workload.
+       - Keep references directional and tied to public CoreWeave capabilities such as petabyte-scale
+         migrations and large-scale GPU training.
 
     Output contract (strict headings in order):
     ## Recommended Cluster Configuration
@@ -232,6 +244,46 @@ FEW_SHOT_EXAMPLES: str = textwrap.dedent(
 
     ## Notes & Assumptions
     - Snippet is illustrative and should be adapted to your cluster policies.
+
+    [Example: Large-Scale ML Training with Massive Dataset]
+    Input:
+    - workload_type: Large-Scale ML Training with Massive Dataset
+    - gpu_count: 1024
+    - priorities: handle 100TB dataset efficiently, high storage I/O throughput, maximum training efficiency, checkpoint reliability
+
+    Output:
+    ## Recommended Cluster Configuration
+    For training on massive datasets (e.g., 100TB+ scale), recommend GB200 or H200-class nodes with InfiniBand networking and distributed-parallel storage (for example, CoreWeave AI Object Storage) for high-throughput data access. At 1024 GPUs, use multi-node topology with fault-tolerant design.
+
+    ## Performance & Business Impact
+    - Directional: CoreWeave storage solutions support high per-GPU throughput (several GB/s range) and aggregate reads scaling significantly at large cluster sizes, enabling efficient data loading for massive datasets.
+    - High goodput (96-98% directional) and reliable checkpointing minimize I/O-related stalls and progress loss.
+
+    ## Sample Deployment Snippet
+    ```yaml
+    cluster:
+      gpu_type: GB200
+      gpu_count: 1024
+      network: InfiniBand
+      storage: distributed_parallel
+    training:
+      strategy: data_parallel
+      checkpoint:
+        async: enabled
+        interval_minutes: 15
+    data:
+      throughput_priority: high
+      dataset_size_tb: "100+"
+    ```
+
+    ## Production Next Steps
+    1. Validate storage and loader performance with a representative 100TB+ shard layout.
+    2. Run end-to-end checkpoint and restore tests under failure conditions.
+    3. Submit an ARENA interest form at coreweave.com/arena for production-scale validation.
+
+    ## Notes & Assumptions
+    - Figures are directional from public benchmark framing and require workload-specific validation.
+    - Actual throughput depends on data pipeline design, preprocessing, and storage access patterns.
     """
 ).strip()
 
@@ -244,6 +296,7 @@ WORKLOAD_OPTIONS: list[str] = [
     "Computer Vision Training",
     "Secure Large-Scale Operational Simulation (Hypothetical)",
     "High-Volume Intelligence Data Processing (Hypothetical)",
+    "Large-Scale ML Training with Massive Dataset",
 ]
 
 
