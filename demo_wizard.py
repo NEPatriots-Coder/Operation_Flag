@@ -1,6 +1,6 @@
 """
 CoreWeave Demo Wizard - Hackathon MVP
-Single-file Gradio + Claude prototype for More. Faster. Better. 2026.
+Single-file Gradio + OpenAI prototype for More. Faster. Better. 2026.
 """
 
 # =============================
@@ -10,14 +10,16 @@ import os
 import tempfile
 from datetime import datetime
 import textwrap
+from pathlib import Path
 from typing import Optional, Tuple
 
 import gradio as gr
+from dotenv import load_dotenv
 
 try:
-    import anthropic
+    from openai import OpenAI
 except ImportError:
-    anthropic = None
+    OpenAI = None
 
 
 # =============================
@@ -176,13 +178,13 @@ WORKLOAD_OPTIONS: list[str] = [
 # Core Helpers
 # =============================
 def load_api_key(env_key: str, fallback_key: str) -> str:
-    """Resolve Anthropic API key from env first, then fallback input."""
+    """Resolve OpenAI API key from env first, then fallback input."""
     env_val = (env_key or "").strip()
     fallback_val = (fallback_key or "").strip()
     resolved = env_val or fallback_val
     if not resolved:
         raise ValueError(
-            "Missing API key. Set ANTHROPIC_API_KEY or provide key in UI fallback field."
+            "Missing API key. Set OPENAI_API_KEY or provide key in UI fallback field."
         )
     return resolved
 
@@ -219,26 +221,21 @@ def build_user_prompt(workload_type: str, gpu_count: int, priorities: str) -> st
 
 
 def extract_text_from_response(resp) -> str:
-    """Extract text from Anthropic response content blocks with safe fallbacks."""
+    """Extract text from OpenAI response object with safe fallbacks."""
     try:
-        content = getattr(resp, "content", None)
-        if content and isinstance(content, list):
-            chunks = []
-            for block in content:
-                block_type = getattr(block, "type", None)
-                if block_type == "text":
-                    chunks.append(getattr(block, "text", ""))
-                else:
-                    maybe_text = getattr(block, "text", None)
-                    if maybe_text:
-                        chunks.append(maybe_text)
-            merged = "\n".join(c for c in chunks if c).strip()
-            if merged:
-                return merged
+        # Chat Completions API primary path.
+        choices = getattr(resp, "choices", None)
+        if choices and isinstance(choices, list):
+            first = choices[0]
+            message = getattr(first, "message", None)
+            content = getattr(message, "content", None)
+            if isinstance(content, str) and content.strip():
+                return content.strip()
 
-        raw_text = getattr(resp, "text", None)
-        if isinstance(raw_text, str) and raw_text.strip():
-            return raw_text.strip()
+        # Responses API fallback path (if app migrates APIs later).
+        out_text = getattr(resp, "output_text", None)
+        if isinstance(out_text, str) and out_text.strip():
+            return out_text.strip()
 
         return str(resp)
     except Exception:
@@ -256,13 +253,14 @@ def generate_demo(
 ) -> Tuple[str, Optional[str]]:
     """Generate markdown demo output and optional markdown export file."""
     try:
-        if anthropic is None:
+        if OpenAI is None:
             raise RuntimeError(
-                "The anthropic package is not installed. Install with: pip install anthropic"
+                "The openai package is not installed. Install with: pip install openai"
             )
 
-        key = load_api_key(os.environ.get("ANTHROPIC_API_KEY", ""), api_key_fallback)
-        client = anthropic.Anthropic(api_key=key)
+        key = load_api_key(os.environ.get("OPENAI_API_KEY", ""), api_key_fallback)
+        client = OpenAI(api_key=key)
+        model = (os.environ.get("OPENAI_MODEL", "") or "gpt-4o-mini").strip()
 
         user_prompt = build_user_prompt(
             workload_type=workload_type,
@@ -270,12 +268,14 @@ def generate_demo(
             priorities=priorities,
         )
 
-        response = client.messages.create(
-            model="claude-3-5-sonnet-latest",
+        response = client.chat.completions.create(
+            model=model,
             max_tokens=1800,
             temperature=0.2,
-            system=f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}",
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[
+                {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}"},
+                {"role": "user", "content": user_prompt},
+            ],
         )
 
         markdown_text = extract_text_from_response(response).strip()
@@ -307,7 +307,7 @@ def generate_demo(
             "## Setup Required\n\n"
             f"{ve}\n\n"
             "**Quick fix:**\n"
-            "- Export `ANTHROPIC_API_KEY` in your shell, or\n"
+            "- Export `OPENAI_API_KEY` in your shell, or\n"
             "- Paste key in the fallback key field and retry.",
             None,
         )
@@ -317,7 +317,7 @@ def generate_demo(
             "Sorry, the request could not be completed.\n\n"
             "**Check the following:**\n"
             "1. API key is valid and has model access.\n"
-            "2. `anthropic` package is installed (`pip install anthropic`).\n"
+            "2. `openai` package is installed (`pip install openai`).\n"
             "3. Network/API service is reachable.\n\n"
             f"**Debug detail:** `{str(ex)}`",
             None,
@@ -357,9 +357,9 @@ def build_interface() -> gr.Blocks:
         )
 
         api_key_fallback_input = gr.Textbox(
-            label="Anthropic API Key (optional fallback)",
+            label="OpenAI API Key (optional fallback)",
             type="password",
-            placeholder="sk-ant-...",
+            placeholder="sk-...",
         )
 
         generate_btn = gr.Button("Generate Demo")
@@ -386,6 +386,9 @@ def build_interface() -> gr.Blocks:
 # =============================
 def main() -> None:
     """Launch the Gradio app."""
+    # Load key from local secrets file if present.
+    load_dotenv(Path(__file__).resolve().parent / "secrets" / ".env")
+
     app = build_interface()
 
     port_raw = os.environ.get("PORT", "7860").strip()

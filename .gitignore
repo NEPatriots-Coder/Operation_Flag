@@ -23,3 +23,5 @@ env/
 
 # Env files
 .env
+secrets/.env
+secrets/*.env

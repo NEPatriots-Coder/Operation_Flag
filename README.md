@@ -7,7 +7,7 @@ This is a single-file Gradio app that generates a structured, **hypothetical** G
 - requested GPU count
 - business/technical priorities
 
-It uses Anthropic Claude (`claude-3-5-sonnet-latest`) and returns:
+It uses OpenAI Chat Completions (`OPENAI_MODEL`, default: `gpt-4o-mini`) and returns:
 - on-screen markdown output
 - optional downloadable `.md` report
 
@@ -39,8 +39,23 @@ pip install -r requirements.txt
 
 ### 3. Set API key
 
+Option A (recommended): put key in `secrets/.env`
+
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+mkdir -p secrets
+echo 'OPENAI_API_KEY="sk-..."' > secrets/.env
+```
+
+Option B: export in shell
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Optional model override:
+
+```bash
+export OPENAI_MODEL="gpt-4o-mini"
 ```
 
 You can also provide a fallback key in the app UI.
@@ -62,6 +77,6 @@ PORT=7861 python demo_wizard.py
 
 ## Project files
 
-- `demo_wizard.py` - app, prompt logic, Anthropic call, and markdown export
+- `demo_wizard.py` - app, prompt logic, OpenAI call, and markdown export
 - `requirements.txt` - Python dependencies
 - `.gitignore` - Python/venv/editor ignores
