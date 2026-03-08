@@ -63,8 +63,13 @@ SYSTEM_PROMPT: str = textwrap.dedent(
          (directional from public reports and MLPerf benchmarks)" only once, when workload scale justifies it.
        - H200: for training/fine-tuning, focus on higher memory capacity (141GB HBM3e) and bandwidth for
          larger models/batches; reserve "up to ~40% higher throughput vs H100" for inference workloads.
+       - GB200: use "up to 2.86x per-chip performance improvement on large models like Llama 3.1 405B
+         (directional from CoreWeave MLPerf Inference v5.0 results vs H200-class)" only for relevant
+         scale/workloads.
        - Next Steps: include "submit an ARENA interest form at coreweave.com/arena for production-scale
          validation" as a CTA when relevant.
+       - Avoid inventing compliance keys in YAML; prefer descriptive notes such as
+         "secure_enclaves: enabled (hypothetical)".
        - Keep YAML realistic and minimal; prefer simple config over complex K8s unless explicitly requested.
 
     Output contract (strict headings in order):
