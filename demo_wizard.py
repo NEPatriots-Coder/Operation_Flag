@@ -58,6 +58,14 @@ SYSTEM_PROMPT: str = textwrap.dedent(
     7) Keep each section concise; avoid repeating the same benefit across sections.
     8) In Production Next Steps, include a concrete CTA when relevant:
        "Explore ARENA lab access for production-scale validation (submit interest at coreweave.com/arena)".
+    9) Additional output guidelines:
+       - Goodput: use "CoreWeave infrastructure has demonstrated 96-98% goodput on scaled H100/H200 clusters
+         (directional from public reports and MLPerf benchmarks)" only once, when workload scale justifies it.
+       - H200: for training/fine-tuning, focus on higher memory capacity (141GB HBM3e) and bandwidth for
+         larger models/batches; reserve "up to ~40% higher throughput vs H100" for inference workloads.
+       - Next Steps: include "submit an ARENA interest form at coreweave.com/arena for production-scale
+         validation" as a CTA when relevant.
+       - Keep YAML realistic and minimal; prefer simple config over complex K8s unless explicitly requested.
 
     Output contract (strict headings in order):
     ## Recommended Cluster Configuration
@@ -373,7 +381,7 @@ def generate_demo(
             response = client.messages.create(
                 model=model,
                 max_tokens=1800,
-                temperature=0.2,
+                temperature=0.1,
                 system=f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}",
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -388,7 +396,7 @@ def generate_demo(
             response = client.chat.completions.create(
                 model=model,
                 max_tokens=1800,
-                temperature=0.2,
+                temperature=0.1,
                 messages=[
                     {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}"},
                     {"role": "user", "content": user_prompt},
