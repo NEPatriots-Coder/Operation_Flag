@@ -25,3 +25,6 @@ env/
 .env
 secrets/.env
 secrets/*.env
+
+# AI assistant instructions (not for version control)
+CLAUDE.md
