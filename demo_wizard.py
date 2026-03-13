@@ -1,5 +1,5 @@
 """
-CoreWeave Demo Wizard - Hackathon MVP
+CoreWeave Atlas - Hackathon MVP
 Single-file Gradio app with OpenAI/Anthropic support for More. Faster. Better. 2026.
 """
 
@@ -513,7 +513,7 @@ def generate_demo(
 def build_interface() -> gr.Blocks:
     """Build and return Gradio Blocks interface."""
     with gr.Blocks() as demo:
-        gr.Markdown("# CoreWeave Demo Wizard – Hackathon MVP")
+        gr.Markdown("# CoreWeave Atlas – Hackathon MVP")
         gr.Markdown(
             "Generate personalized GPU cluster demos in seconds. "
             "Prototype for More. Faster. Better. 2026."
